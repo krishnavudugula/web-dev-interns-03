@@ -14,6 +14,6 @@ router.patch(
   requirePermission('application:change-stage'),
   controller.changeStage,
 );
-router.get('/applications/:id/history', authenticate, controller.history);
+router.get('/applications/:id/history', authenticate, requirePermission('application:view-history'), controller.history);
 
 module.exports = router;

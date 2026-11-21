@@ -1,6 +1,7 @@
 const AppError = require('../utils/AppError');
 const applicationRepository = require('../repositories/applicationRepository');
 const jobRepository = require('../repositories/jobRepository');
+const { can } = require('../config/permissions');
 
 const transitions = {
   APPLIED: ['SCREENING', 'REJECTED', 'WITHDRAWN'],
@@ -20,17 +21,34 @@ async function submit(jobId, candidateId, data) {
   return applicationRepository.create({ jobId, candidateId, ...data });
 }
 
+async function requireApplicationCompany(application, user) {
+  if (!can(user.role, 'application:view-all')) return null;
+  if (!Number.isInteger(user.companyId) || user.companyId <= 0) {
+    throw AppError.forbidden('Staff accounts must belong to a company');
+  }
+  const job = await jobRepository.findById(application.jobId);
+  if (!job || job.companyId !== user.companyId) {
+    throw AppError.notFound('Application not found');
+  }
+  return job;
+}
+
 async function getVisible(id, user) {
   const application = await applicationRepository.findById(id);
   if (!application) throw AppError.notFound('Application not found');
-  const staff = user.role === 'ADMIN' || user.role === 'HR';
-  if (!staff && application.candidateId !== user.id) throw AppError.notFound('Application not found');
+  if (can(user.role, 'application:view-all')) {
+    await requireApplicationCompany(application, user);
+  } else if (application.candidateId !== user.id) {
+    throw AppError.notFound('Application not found');
+  }
   return application;
 }
 
-async function changeStage(id, stage, changedBy) {
+async function changeStage(id, stage, user) {
   const application = await applicationRepository.findById(id);
   if (!application) throw AppError.notFound('Application not found');
+  if (!can(user.role, 'application:change-stage')) throw AppError.forbidden();
+  await requireApplicationCompany(application, user);
   if (!transitions[application.stage].includes(stage)) {
     throw new AppError(
       422,
@@ -41,7 +59,7 @@ async function changeStage(id, stage, changedBy) {
   const updated = await applicationRepository.updateStage(id, stage);
   await applicationRepository.addHistory(
     id,
-    changedBy,
+    user.id,
     application.stage,
     stage,
     `Application moved from ${application.stage} to ${stage}.`,
@@ -50,6 +68,7 @@ async function changeStage(id, stage, changedBy) {
 }
 
 async function getHistory(id, user) {
+  if (!can(user.role, 'application:view-history')) throw AppError.forbidden();
   await getVisible(id, user);
   return applicationRepository.getHistory(id);
 }

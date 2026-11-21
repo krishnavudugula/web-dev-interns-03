@@ -1,4 +1,5 @@
 const database = require('../config/database');
+const jobRepository = require('./jobRepository');
 
 const applications = new Map();
 const stageHistory = new Map();
@@ -68,7 +69,7 @@ async function findById(id) {
 
 async function findByJobAndCandidate(jobId, candidateId) {
   if (database.isDatabaseConfigured()) {
-    const { insertId } = await database.query(
+    const { rows } = await database.query(
       'SELECT * FROM applications WHERE job_id = ? AND candidate_id = ?',
       [jobId, candidateId],
     );
@@ -79,12 +80,32 @@ async function findByJobAndCandidate(jobId, candidateId) {
   ) || null;
 }
 
-async function list() {
+async function list({ companyId } = {}) {
   if (database.isDatabaseConfigured()) {
+    if (companyId !== undefined && companyId !== null) {
+      const { rows } = await database.query(
+        `SELECT a.* FROM applications a
+         JOIN jobs j ON j.id = a.job_id
+         WHERE j.company_id = ?
+         ORDER BY a.applied_at DESC`,
+        [companyId],
+      );
+      return rows.map(toApplication);
+    }
     const { rows } = await database.query('SELECT * FROM applications ORDER BY applied_at DESC');
     return rows.map(toApplication);
   }
-  return [...applications.values()].sort((a, b) => b.id - a.id).map((application) => ({ ...application }));
+
+  const visible = [];
+  for (const application of applications.values()) {
+    if (companyId === undefined || companyId === null) {
+      visible.push(application);
+      continue;
+    }
+    const job = await jobRepository.findById(application.jobId);
+    if (job && job.companyId === companyId) visible.push(application);
+  }
+  return visible.sort((a, b) => b.id - a.id).map((application) => ({ ...application }));
 }
 
 async function updateStage(id, stage) {
@@ -106,7 +127,7 @@ async function updateStage(id, stage) {
 
 async function addHistory(applicationId, changedBy, previousStage, newStage, note) {
   if (database.isDatabaseConfigured()) {
-    const { rows } = await database.query(
+    const { insertId } = await database.query(
       `INSERT INTO application_stage_history
         (application_id, changed_by, previous_stage, new_stage, note)
        VALUES (?, ?, ?, ?, ?)`,

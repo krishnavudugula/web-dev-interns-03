@@ -1,4 +1,5 @@
 const applicationRepository = require('../repositories/applicationRepository');
+const { can } = require('../config/permissions');
 const applicationService = require('../services/applicationService');
 const {
   validateApplication,
@@ -18,7 +19,8 @@ const submit = wrap(async (req, res) => {
 });
 
 const list = wrap(async (req, res) => {
-  res.json({ applications: await applicationRepository.list() });
+  const companyId = can(req.user.role, 'application:view-all') ? req.user.companyId : undefined;
+  res.json({ applications: await applicationRepository.list({ companyId }) });
 });
 
 const get = wrap(async (req, res) => {
@@ -30,7 +32,7 @@ const changeStage = wrap(async (req, res) => {
   const application = await applicationService.changeStage(
     validateId(req.params.id),
     validateStage(req.body),
-    req.user.id,
+    req.user,
   );
   res.json({ application });
 });

@@ -10,7 +10,7 @@ const jobRoutes = require('./routes/jobRoutes');
 const applicationRoutes = require('./routes/applicationRoutes');
 const resumeRoutes = require('./routes/resumeRoutes');
 const candidateRoutes = require('./routes/candidateRoutes');
-
+const searchRoutes = require('./routes/searchRoutes');
 const { notFoundHandler, errorHandler } = require('./middleware/errorHandler');
 
 const app = express();
@@ -22,6 +22,7 @@ app.get('/api/health', (req, res) => res.json({ status: 'ok' }));
 app.use('/api/auth', authRoutes);
 app.use('/api/candidates', candidateRoutes);
 app.use('/api/jobs', jobRoutes);
+app.use('/api', searchRoutes);
 app.use('/api', applicationRoutes);
 app.use('/api', resumeRoutes);
 app.use('/api', protectedRoutes);
